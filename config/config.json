@@ -1,0 +1,10 @@
+{
+  "development": {
+    "username": "C##LOCAL_GEFAMI",
+    "password": "password",
+    "database": "XE",
+    "host": "127.0.0.1",
+    "dialect": "oracle",
+    "port": 1521
+  }
+}
