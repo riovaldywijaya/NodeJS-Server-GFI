@@ -1,20 +1,35 @@
-const { User, sequelize } = require('../models');
+const { User } = require('../models');
 const { comparePassword } = require('../helpers/bcrypt');
 const { signToken } = require('../helpers/jwt');
 
 class UserController {
+  static async register(req, res, next) {
+    try {
+      UserController.validateRequestBody(req.body, ['email', 'password', 'name']);
+
+      const { email, password, name, phoneNumber, role } = req.body;
+
+      const validRole = UserController.checkRole(role);
+
+      const user = await UserController.createUser(email, password, name, phoneNumber, validRole);
+
+      res.status(201).json({
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async login(req, res, next) {
     try {
+      UserController.validateRequestBody(req.body, ['email', 'password']);
+
       const { email, password } = req.body;
 
-      if (!email) throw { name: 'EmailIsNull' };
-      if (!password) throw { name: 'PasswordIsNull' };
-
-      const user = await User.findOne({ where: { email } });
-      if (!user) throw { name: 'InvalidEmailOrPassword' };
-
-      const isPasswordValid = comparePassword(password, user.password);
-      if (!isPasswordValid) throw { name: 'InvalidEmailOrPassword' };
+      const user = await UserController.checkCredential(email, password);
 
       const access_token = signToken({
         id: user.id,
@@ -28,34 +43,36 @@ class UserController {
     }
   }
 
-  static async register(req, res, next) {
-    try {
-      const { email, password, name, phoneNumber, role } = req.body;
-      const allowedRoles = ['ADMIN', 'USER'];
-      const userRole = allowedRoles.includes(role.toUpperCase()) ? role : 'USER';
+  static checkRole(role) {
+    return ['ADMIN', 'USER'].includes(role?.toUpperCase()) ? role.toUpperCase() : 'USER';
+  }
 
-      if (!email) throw { name: 'EmailIsNull' };
-      if (!password) throw { name: 'PasswordIsNull' };
-      if (!name) throw { name: 'NameIsNull' };
+  static async createUser(email, password, name, phoneNumber, role) {
+    const user = await User.findOne({ where: { email } });
+    if (user) throw { name: 'EmailAlreadyRegistered' };
 
-      const user = await User.findOne({ where: { email } });
-      if (user) throw { name: 'EmailAlreadyRegistered' };
+    return await User.create({
+      email,
+      password,
+      name,
+      phoneNumber,
+      role,
+    });
+  }
 
-      const createUser = await User.create({
-        email,
-        password: password,
-        name,
-        phoneNumber,
-        role : userRole
-      });
+  static async checkCredential(email, password) {
+    const user = await User.findOne({ where: { email } });
+    if (!user) throw { name: 'InvalidEmailOrPassword' };
 
-      res.status(201).json({
-        email: createUser.email,
-        name: createUser.name,
-        role: createUser.role,
-      });
-    } catch (error) {
-      next(error);
+    const isPasswordValid = comparePassword(password, user.password);
+    if (!isPasswordValid) throw { name: 'InvalidEmailOrPassword' };
+
+    return user;
+  }
+
+  static validateRequestBody(body, requiredFields) {
+    for (const field of requiredFields) {
+      if (!body[field]) throw { name: `${field}IsNull` };
     }
   }
 }
